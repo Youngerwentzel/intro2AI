@@ -1,4 +1,3 @@
-# work/scripts/test_encoder.py
 import os
 from pathlib import Path
 
@@ -8,27 +7,36 @@ from PIL import Image
 from torchvision import transforms
 from timm.data import resolve_data_config
 
-# ---------- find data root ----------
-def find_data_root() -> Path:
-    env = os.environ.get("AIAA2205_DATA_ROOT")
-    candidates = [Path(env)] if env else []
-    here = Path.cwd()
-    for base in [here, *here.parents][:6]:
-        candidates += [base, base / "AIAA2205Project"]
-    for c in candidates:
-        if (c / "Training_Labels.csv").is_file():
-            return c
-    raise FileNotFoundError("Set AIAA2205_DATA_ROOT to the AIAA2205Project folder.")
+# =====================================================================
+# ⚠️ IMPORTANT: Change this path if your dataset is somewhere else.
+# Based on your setup, it's likely on your Desktop.
+# =====================================================================
+DATA_ROOT = Path("/Users/youngerwentzel/Desktop/AIAA2205Project")
 
-DATA_ROOT = find_data_root()
-print("data root:", DATA_ROOT)
+print("Looking for data in:", DATA_ROOT)
+
+# Check if the path is correct before running
+if not (DATA_ROOT / "Validation").exists():
+    print(f"\n❌ ERROR: Could not find the 'Validation' folder inside {DATA_ROOT}")
+    print("Please check that the AIAA2205Project folder is exactly there, or change the path on line 11.")
+    exit()
 
 # ---------- config ----------
-ENCODER_NAME = "tf_efficientnet_b0.in1k"   # try "resnet50.a1_in1k", "mobilenetv3_large_100.miil_in21k_ft_in1k"
-N_IMAGES = 300                              # how many validation images to embed
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+ENCODER_NAME = "tf_efficientnet_b0.in1k"
+N_IMAGES = 300
+
+# Mac M-series chips use "mps" for GPU acceleration. 
+# If you have an Intel Mac, it will fall back to "cpu".
+if torch.backends.mps.is_available():
+    DEVICE = "mps" 
+elif torch.cuda.is_available():
+    DEVICE = "cuda"
+else:
+    DEVICE = "cpu"
+print(f"Using device: {DEVICE}")
 
 # ---------- load encoder ----------
+print(f"Downloading/Loading {ENCODER_NAME}...")
 model = timm.create_model(ENCODER_NAME, pretrained=True, features_only=True).to(DEVICE).eval()
 
 cfg = resolve_data_config({}, model=model)
@@ -41,7 +49,7 @@ tf = transforms.Compose([
 
 # ---------- smoke test ----------
 paths = sorted((DATA_ROOT / "Validation").glob("*.jpg"))[:N_IMAGES]
-print(f"\nfound {len(paths)} validation images")
+print(f"\nFound {len(paths)} validation images")
 
 img = Image.open(paths[0]).convert("RGB")
 x = tf(img).unsqueeze(0).to(DEVICE)
@@ -62,7 +70,7 @@ def embed(paths, batch=32):
     out = []
     for i in range(0, len(paths), batch):
         x = torch.stack([tf(Image.open(p).convert("RGB")) for p in paths[i:i+batch]]).to(DEVICE)
-        out.append(model(x)[-1].mean(dim=(2, 3)))
+        out.append(model(x)[-1].mean(dim=(2, 3)).cpu())
     return torch.cat(out)
 
 F = embed(paths)
