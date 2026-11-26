@@ -1,0 +1,6 @@
+# 本框架仅依赖 PyTorch；当前开发环境使用 torch 2.10.0。
+# CPU/CUDA 版本请按自己环境安装；timm 与 torchvision 用于真实 EfficientNet 接入。
+torch>=2.0
+torchvision
+timm>=1.0,<2
+Pillow
